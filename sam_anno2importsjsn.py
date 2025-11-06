@@ -12,9 +12,15 @@ def check(a):
         return True
     except:
         return False
-
+################################################################
 all_videos = glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=saudi_video_sync/Hail/**/*.MP4",recursive=True)
-
+all_jsons = glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=roadis_phase4/ml_support/Qatar oct-2025/Green Zone/SH-MAP GREEN ( 12 &13-Oct-2025)/Green - Main Road - Doha Road, Al Khor, Qatar (12-Oct-2025)/**/*sam_anno.json",recursive=True)
+site_name = "Qatar"
+date = '2024-11-11'
+version = '001'
+splitvalue = 3000
+writeimg = False
+################################################################
 def normal(a,w,h):
     # print(a,"@#@#")
     # cont = []
@@ -38,8 +44,7 @@ def create_image_url(filepath):
     """
     filename = os.path.basename(filepath)
     return f'/data/local-files/?d={labelstudio_path}/images/{filename}'
-date = '2024-11-11'
-version = '001'
+
 months = date.split("-")[:2]
 months.append(date)
 date = months
@@ -54,96 +59,102 @@ empty_xml_count = 0
 
 
 
-
-
-json_p = '/home/tl028/Downloads/saudi_annotate/2024_0728_104453_F_sam_anno.json'
-with open(json_p,'r') as f:
-    data = eval(f.read())
-
-image_name = 1
-error_count = 0
-vname = os.path.basename(json_p)
-
-video = getvideo(vname,all_videos)
-cap = cv2.VideoCapture(video)
-ret,fr = cap.read()
 json_data = []
-for x in data:
-    if check(x):
-        print(x)
+for json_p in all_jsons: 
+    # json_p = '/home/tl028/Downloads/saudi_annotate/2024_0728_104453_F_sam_anno.json'
+    with open(json_p,'r') as f:
+        data = eval(f.read())
 
-        try:
-            results = []
-            # GOT = False
-            for ast in data[x]:
-                # if 'hevro' in ast:
-                    # GOT =True
-                for vals in data[x][ast]:
-                    region_id = str(uuid4())[:10]
-                    label_name=ast+"_SA"
-                    contours=vals[3]
-                    # print(,"@@")
+    image_name = 1
+    error_count = 0
+    vname = os.path.basename(json_p)
 
-                    result = {
-                        "id": region_id,
-                        "from_name": "polygon",
-                        "to_name": "image",
-                        "original_width": fr.shape[1],
-                        "original_height": fr.shape[0],
-                        "image_rotation": 0,
-                        "value": {
-                            "points" : normal(contours[0],fr.shape[1],fr.shape[0]),
-                            "polygonlabels" : [label_name],
-                            "closed" : True
-                        },
-                        'score': 0.811,
-                        "type": "polygonlabels",
-                    }
-                    results.append(result)
-            image_file_path = f"{image_name:06}.jpeg"
-            image_name+=1
-            if  #results :
-                cap.set(1,int(x))
-                ret,fr = cap.read()
-                print("saved",f"{data_path}/images/{image_file_path}")
-                cv2.imwrite(f"{data_path}/images/{image_file_path}",fr)
+    video = getvideo(vname,all_videos)
+    vname = vname.split(".")[0]
+    cap = cv2.VideoCapture(video)
+    ret,fr = cap.read()
+    
+    for x in data:
+        if check(x):
+            print(x)
+
+            try:
+                results = []
+                # GOT = False
+                for ast in data[x]:
+                    # if 'hevro' in ast:
+                        # GOT =True
+                    for vals in data[x][ast]:
+                        region_id = str(uuid4())[:10]
+                        label_name=ast
+                        contours=vals[3]
+           
+
+                        result = {
+                            "id": region_id,
+                            "from_name": "polygon",
+                            "to_name": "image",
+                            "original_width": fr.shape[1],
+                            "original_height": fr.shape[0],
+                            "image_rotation": 0,
+                            "value": {
+                                "points" : normal(contours[0],fr.shape[1],fr.shape[0]),
+                                "polygonlabels" : [label_name],
+                                "closed" : True
+                            },
+                            'score': 0.811,
+                            "type": "polygonlabels",
+                        }
+                        results.append(result)
+                image_file_path = f"{vname}_{x}.jpeg"
+                # image_name+=1
+                if  results :
+                    if writeimg:
+                        cap.set(1,int(x))
+                        ret,fr = cap.read()
+                        print("saved",f"{data_path}/images/{image_file_path}")
+                        cv2.imwrite(f"{data_path}/images/{image_file_path}",fr)
+                    json_data.append({
+                            'data': {
+                                'image': create_image_url(image_file_path),
+                                'site_name' : site_name 
+                            },
+                            'predictions': [{
+                                'model_version': "sam_2",
+                                'score': 0.811,
+                                'result': results,
+                            }]
+                    })
+                else:
+                    # json_data.append({
+                    #         'data': {
+                    #             'image': create_image_url(image_file_path)
+                    #         }
+                    # })
+                    empty_xml_count += 1
+                # cv2.imwrite(f"{data_path}/images/{image_file_path}.jpeg",fr)
+            except ET.ParseError:
+                empty_xml_count += 1
                 json_data.append({
                         'data': {
-                            'image': create_image_url(image_file_path)
-                        },
-                        'predictions': [{
-                            'model_version': "sam_2",
-                            'score': 0.811,
-                            'result': results,
-                        }]
+                            'image': create_image_url(image_file_path),
+                            'site_name' : site_name 
+                        }
                 })
-            else:
+            except Exception as e:
+                print(e)
                 # json_data.append({
                 #         'data': {
-                #             'image': create_image_url(image_file_path)
+                #             'image': create_image_url(image_file_path),
+                #             'site_name' : site_name 
                 #         }
                 # })
-                empty_xml_count += 1
-            # cv2.imwrite(f"{data_path}/images/{image_file_path}.jpeg",fr)
-        except ET.ParseError:
-            empty_xml_count += 1
-            json_data.append({
-                    'data': {
-                        'image': create_image_url(image_file_path)
-                    }
-            })
-        except Exception as e:
-            print(e)
-            json_data.append({
-                    'data': {
-                        'image': create_image_url(image_file_path)
-                    }
-            })
-            error_count += 1
+                error_count += 1
 
-with open(os.path.join(data_path, "import.json"), "w") as json_file:
-    json.dump(json_data, json_file, indent = 4)
+for i in range(0,len(data_path),splitvalue):
 
+    with open(os.path.join(data_path, "import.json"), "w") as json_file:
+        json.dump(json_data[i:i+splitvalue], json_file, indent = 4)
 
 
 

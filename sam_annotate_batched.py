@@ -13,6 +13,7 @@ import time
 from depth import DepthAnything
 from collections import defaultdict
 
+
 def split(data):
     ndata = []
     n=len(data)
@@ -130,8 +131,8 @@ def converting_to_asset_format(data_json, total_frames):
             for index, v in enumerate(data_json[i][asset]):
                 if asset not in data:
                     data[asset] = {}
-                if asset in linear and  int(v[0]) < 9000: # ignore linear which arenot manually added
-                    continue
+                # if asset in linear and  int(v[0]) < 9000: # ignore linear which arenot manually added
+                #     continue
                 if int(v[0]) not in data[asset]:
                     data[asset][int(v[0])] = []
                 data[asset][int(v[0])].append([i, v[1], v[2]])
@@ -149,7 +150,7 @@ class near:
         self.predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint,device = torch.device("cuda"))
         self.dpt = DepthAnything()
 
-    def set_folder(self,video,frame_no,steps,temp_path='./temp'):
+    def set_folder(self,video,frame_no,temp_path='./temp',steps = 25):
 
         os.makedirs(temp_path,exist_ok=True)
         try:
@@ -183,65 +184,102 @@ class near:
         try:
             with open(path,"r") as f:
                 data = eval(f.read())
+                data["Assets"] = split(data["Assets"])
         except Exception as ex:
             print(ex)
             return
-        linear = set( [
-                "Bad_Crash_Barrier","Bad_Fence",
-                "Bad_Guard_Rails",
-                "Bad_Jersey_Barrier","Bad_Kerbs",
-                "Bad_Lane","Bad_MBCB",
-                "Patch","Crash_Barrier",
-                "Fence",
-                "Guard_Rails",
-                "Jersey_Barrier",
-                "Kerbs",
-                "MBCB",
-                "Lane",
-                "Pot_Holes",
-                "Cracks",
-                "Manhole",
-                "Left_Road_Markings",
-                "Right_Road_Markings",
-                "Sand_Accumulation"])
-        for x in data["Assets"]:
-            steps = 50
-            if "start" in x[0].lower() or "end"  in x[0].lower():
-                continue
-            astname = x[0].replace("RIGHT_","").replace("LEFT_","")
-            if astname in  linear:
-                continue
+        # return
+        # for qq in  data["Assets"]:
+        #     print(qq)
+        # return
+        # linear = set( [
+        #         "Bad_Crash_Barrier","Bad_Fence",
+        #         "Bad_Guard_Rails",
+        #         "Bad_Jersey_Barrier","Bad_Kerbs",
+        #         "Bad_Lane","Bad_MBCB",
+        #         "Patch","Crash_Barrier",
+        #         "Fence",
+        #         "Guard_Rails",
+        #         "Jersey_Barrier",
+        #         "Kerbs",
+        #         "MBCB",
+        #         "Lane",
+        #         "Pot_Holes",
+        #         "Cracks",
+        #         "Manhole",
+        #         "Left_Road_Markings",
+        #         "Right_Road_Markings",
+        #         "Sand_Accumulation"])
+        newdata= {}
+        
+        for index , xx in enumerate(data["Assets"]):
+            
+            xx[2] = int(xx[2])
+            if xx[2] not in newdata:
+                newdata[xx[2]] = []
+            newdata[xx[2]].append([xx[0].replace("RIGHT_","").replace("LEFT_","").replace("_Start","").replace("_End",""),xx[3],xx[4]])
+        print(newdata)
+        framenos = [ fr for  fr in newdata]
+        framenos.sort()
+        
+        for i,key in enumerate(framenos):
+            v = newdata[key]
+            steps=60
+            if i < len(framenos)-1:
+                steps = (framenos[i+1]-framenos[i]-1)//2
 
-            frame = int(x[2])
+
+            steps = min(60,steps)
+            
+            # astname = v[0].replace("RIGHT_","").replace("LEFT_","").replace("_Start","").replace("_End","")
+            # if astname not in {'SAEP_(Crash_Energy_Absorption_System)', 'Signboard_Additional_board', 'Tunnel_Direction_Light', 'Fire_Hoses', 'Bridge_-Technical_Metal_Barrier', 'MUSIOR', 'Tunnel_Traffic_Barriers', 'Fire_Extinguisher', 'CCTV', 'CCTV_Board', 'Traffic_Bollard', 'Signboard_Information_Board', 'Direction_Signal'}:
+            #     continue
+            # astname_with_side = v[0].replace("_Start","").replace("_End","")
+            # if "end" in v[0].lower():
+            #     continue
+            # if "start" in v[0].lower():
+            #     continue
+
+
+            frame = key
             cap = cv2.VideoCapture(video)
-            self.set_folder(video,frame,steps)
+            self.set_folder(video,frame,steps=steps)
             try:
                 inference_state = self.predictor.init_state(video_path="./temp")
             except Exception as ex:
+                print(ex)
                 continue
             self.predictor.reset_state(inference_state)
 
-            box = np.array(x[3:5], dtype=np.float32).reshape(-1)
+            # box = np.array(x[3:5], dtype=np.float32).reshape(-1)
+            boxes = np.array([np.array(x[1:3], dtype=np.float32).reshape(-1) for x in v])
+           
             # annotations[str(frame)][astname].append(["1",x[3],x[4]])
-            _,out_obj_ids, out_mask_logits = self.predictor.add_new_points_or_box(
-                inference_state=inference_state,
-                frame_idx=0,
-                obj_id=1,
-                box = box,
-            )
+            for obj_id, box in enumerate(boxes, start=1):
+                box = np.array(box, dtype=np.float32).reshape(-1)
+                _, out_obj_ids, out_mask_logits = self.predictor.add_new_points_or_box(
+                    inference_state=inference_state,
+                    frame_idx=0,
+                    obj_id=obj_id,   # <-- single int per object
+                    box=box,
+                )
             out_frame_idx=0
-            valss =[(x[3:5],0)]
+
             breaker =0
+            print(v)
             for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(inference_state):
 
-                if 1:
+                # if 1:
+                for obj_id, mask in zip(out_obj_ids, out_mask_logits):
+                    # print(mask.shape,obj_id)
 
-                    mask = out_mask_logits[0][0]>0.0
+                    mask = mask[0]>0.0
                     bbox = mask_to_bounding_box(mask)
+                    # print(bbox)
                     mask=mask.detach().cpu().numpy().astype(np.uint8)*255
-                    # mask=cv2.resize(mask,(w,h))
+                    # # mask=cv2.resize(mask,(w,h))
                     contours= mask_to_polygons(mask)
-                    # contours =''
+                    # # contours =''
                     if bbox[0] is None:# or bbox[1][0]>2558 or bbox[0][0]<1 or bbox[0][1]<1 or bbox[1][1]>1438:
                         breaker+=1
                         if breaker > 4:
@@ -249,42 +287,58 @@ class near:
                         continue
                     else:
                         # annotations[str(frame-out_frame_idx*2)][astname].append(["1",bbox[0],bbox[1]])
-                        annotations[str(frame-out_frame_idx*2)][astname].append(["1",bbox[0],bbox[1],contours])
-                        # cap.set(1,frame-out_frame_idx*2)
-                        # ret,fr =cap.read()
                         
-                        # os.makedirs(f'img/{x[5][1]}',exist_ok=True)
-                        # cv2.imwrite(f'img/{x[5][1]}/{frame-out_frame_idx*2}.jpeg',fr[bbox[0][1]:bbox[1][1],bbox[0][0]:bbox[1][0]])
+                        annotations[str(frame-out_frame_idx*2)][v[obj_id-1][0]].append(["1",bbox[0],bbox[1],contours])
+                        #cap.set(1,frame-out_frame_idx*2)
+                        #ret,fr =cap.read()
+                        #os.makedirs(f'img/{x[5][1]}',exist_ok=True)
+                        #cv2.imwrite(f'img/{x[5][1]}/{frame-out_frame_idx*2}.jpeg',fr[bbox[0][1]:bbox[1][1],bbox[0][0]:bbox[1][0]])
                         breaker=0
 
 
-        path = path.replace("_final.","_sam_anno.")
-        with open(path, "w") as f:
-            json.dump(annotations,f)
-        return annotations
+            path = path.replace("_final.","_sam_anno.")
+            with open(path, "w") as f:
+                json.dump(annotations,f)
+            return annotations
             
 
 
 
 if __name__ == "__main__":
     obj = near()
-    vid=list(glob.glob("/home/sultan/Downloads/fp_chev/**/*.MP4",recursive=True))
-    jsn=list(glob.glob("/home/sultan/Downloads/fp_chev/**/*_final.json",recursive=True))
+    # vid=list(glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=roadis_phase4/Painam palli/LHS/**/*.MP4",recursive=True))
+    # jsn=list(glob.glob("/home/tl028/Downloads/*25_0224_134313_F_final.json",recursive=True))
+
+
+    vid  = list(glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=roadis_phase4/ml_support/Qatar oct-2025/Green Zone/SH-MAP GREEN ( 12 &13-Oct-2025)/Green - Main Road - Doha Road, Al Khor, Qatar (12-Oct-2025)/**/*.MP4",recursive=True))
+    jsn =  list(glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=roadis_phase4/ml_support/Qatar oct-2025/Green Zone/SH-MAP GREEN ( 12 &13-Oct-2025)/Green - Main Road - Doha Road, Al Khor, Qatar (12-Oct-2025)/**/*_final.json",recursive=True))
+    # jsons_dict = { os.path.basename(x).replace(".MP4","_final.json"):x for x in vid }
     jsn.sort()
-    jsons_dict = { os.path.basename(x).replace(".MP4","_final.json"):x for x in vid }
-    for file in jsn:
+    # jsons_dict = { os.path.basename(x).replace(".MP4","_final.json"):x for x in vid }
+    for qq , file in enumerate(jsn):
+        print("-----------------",qq,"-----------------------",file)
+
         # if "/108/" not in file:
         #     continue
 
-        print(file)
-        name = os.path.basename(file)
-        vid_path = jsons_dict.get(name,None)
-        if os.path.exists(file.replace("_final.","_final_new.")):
+        # print(file)
+        # name = os.path.basename(file)
+        # print(name,jsons_dict)
+        # vid_path = jsons_dict.get(name,None)
+        vid_path= None
+        for xxx in vid:
+            if os.path.basename(xxx).replace(".MP4","") in file:
+                vid_path = xxx
+        if vid_path is None:
             continue
+        # print(vid_path)
+        # if os.path.exists(file.replace("_final.","_final_new.")):
+        #     continue
 
         if vid_path is not None and os.path.exists(vid_path) :
-            # print(vid_path,file)
+
             ann = obj.update_final_json(vid_path,file)
+        
 
 
 
@@ -429,4 +483,3 @@ if __name__ == "__main__":
 
 # if __name__ == '__main__':
 #     app.run(debug=True,host='0.0.0.0')
-
