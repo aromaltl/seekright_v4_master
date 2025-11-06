@@ -65,6 +65,9 @@ def merge(lt,ln):
         s=s+'W'+str(abs(ln))
     return s
 
+if not os.path.exists("Image-ExifTool-12.22/exiftool"):
+    os.system("wget takeleap.in/ml-gui/Image-ExifTool-12.22.zip && unzip Image-ExifTool-12.22.zip && chmod -R 777 .")
+
 def get_gps(video_path):
     try:
         if os.path.exists(video_path.replace(".MP4",".csv")):
