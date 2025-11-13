@@ -46,6 +46,41 @@ import json
 from global_variables import variable_obj
 os.makedirs("csv_and_jsons",exist_ok=True)
 #from processing import dataProcessing
+
+def filter_weak_detections(data):
+                # Count occurrences by asset_name + id combination
+    asset_id_count = defaultdict(int)
+    for frame, objects in data.items():
+        if isinstance(objects, dict):
+            for asset_name, detections in objects.items():
+                for detection in detections:
+                    obj_id = detection[0]
+                    key = f"{asset_name}_{obj_id}"
+                    
+                    asset_id_count[key] += 1
+
+    # Find asset+id combinations with < 3 occurrences
+    # to_remove = []
+    # for key, count in asset_id_count.items():
+
+    to_remove = [(asset, obj_id) for key, count in asset_id_count.items() 
+                if count < 3 for asset, obj_id in [key.rsplit('_', 1)]]
+    
+    if to_remove:
+        for asset, obj_id in to_remove:
+            print(f"  Removed {asset} ID '{obj_id}': {asset_id_count[f'{asset}_{obj_id}']} occurrences")
+
+    # Remove detections with < 3 occurrences
+    for frame in data:
+        if isinstance(data[frame], dict):
+            for asset_name in data[frame]:
+                data[frame][asset_name] = [det for det in data[frame][asset_name] 
+                                            if (asset_name, det[0]) not in to_remove]
+                if not data[frame][asset_name]:
+                    del data[frame][asset_name]
+            if not data[frame]:
+                del data[frame]
+
 class Detections:
 
     def __init__(self,cap):
@@ -450,7 +485,7 @@ class Detections:
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         unstable =0
         print("total frames: ",total)
-        total =min(20000,total)
+        # total =min(20000,total)
         self.frame_count =-1
         break_after = 22
         try:
@@ -525,7 +560,7 @@ class Detections:
                 img = np.array(darknet_image)
                 # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
                 img = cv2.resize(img,(1024,576))
-                results = self.network(img,verbose=False)#,verbose=False
+                results = self.network(img,verbose=False,iou =0.4,agnostic_nms=True)#,verbose=False
                 res_box = results[0].boxes.cpu().numpy()
                 masks = results[0].masks
                 
@@ -548,8 +583,43 @@ class Detections:
                     masks=[]
                 # print(res_box.cls.astype(int),res_box.conf,res_box.xywh.astype(int),masks,"@#@#@#@#$@$@")
                 iterate = zip(res_box.cls.astype(int),res_box.conf,res_box.xywh.astype(int),res_box.xyxy.astype(int),masks)
-                for cls_name, confidence, boxxywh,boxxyxy, mask in iterate:
-                    # print(boxxywh)
+
+                ############### LIGHTS LOGIC ###########
+
+                def filterlights(iterate):
+                    ignore_index =set()
+                    l = None
+                    r = None
+                    for ind,(cls_name, boxxywh,boxxyxy) in enumerate(iterate):
+                        # print(cls_name, boxxywh,boxxyxy)
+                        cls_name = class_names[int(cls_name)]
+                        if 'light' in cls_name.lower():
+                            if boxxywh[0] < 1024//2:
+                                if l is None:
+                                    l = (boxxyxy[1],ind)
+                                else:
+                                    if l[0]>boxxyxy[1]:
+                                        ignore_index.add(l[1])
+                                        l=(boxxyxy[1],ind)
+                                    else:
+                                        ignore_index.add(ind)
+                            else:
+                                if r is None:
+                                    r = (boxxyxy[1],ind)
+                                else:
+                                    if r[0]>boxxyxy[1]:
+                                        ignore_index.add(r[1])
+                                        r=(boxxyxy[1],ind)
+                                    else:
+                                        ignore_index.add(ind)
+                    return ignore_index
+
+                ###############
+                igno=filterlights(zip(res_box.cls.astype(int),res_box.xywh.astype(int),res_box.xyxy.astype(int)))
+                for ind,(cls_name, confidence, boxxywh,boxxyxy, mask) in enumerate(iterate):
+                    # print(boxxywh,boxxyxy)
+                    if ind in igno:
+                        confidence =0.1
                     cls_name = class_names[int(cls_name)]
                     
                     # if str(frame_no) not in self.all_detections:
@@ -824,6 +894,7 @@ class Detections:
             if arguments["show_count"]:
                 video_count.release()
             # video.release()
+        filter_weak_detections(self.json_out)
         if not self.quit:
             
             with open('csv_and_jsons/' + video_name + '.json', 'w') as fp:

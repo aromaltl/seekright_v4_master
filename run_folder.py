@@ -7,6 +7,7 @@ import numpy as np
 import requests
 import time
 import re
+import subprocess ,sys
 
 def split_list(videos,id,share=1,):
     tot=len(videos)
@@ -42,9 +43,32 @@ if __name__ == "__main__":
             vehicle_name=v
             video_name = os.path.basename(x)
             vname=video_name.replace("_","").replace("F.MP4",f"_{vehicle_name}.MP4")
-            os.system(f"python3 v4.py -i '{x}' --vehicle '{vehicle_name}' --vname '{vname}' ")
-        
-            print("done")
+            # os.system(f"python3 v4.py -i '{x}' --vehicle '{vehicle_name}' --vname '{vname}' ")
+            cmd = [
+                "python3", "v4.py",
+                "-i", x,
+                "--vehicle", vehicle_name,
+                "--vname", vname
+            ]
+            try:
+                result = subprocess.run(
+                    cmd,
+                    timeout=900,          # e.g. 300 seconds = 5 minutes
+                    check=True,           # raises CalledProcessError if exit != 0
+                    text=True,            # decode output as text
+                    # capture_output=True   # capture stdout/stderr
+                    stdout=sys.stdout,
+                    stderr=sys.stderr
+                )
+                #print("✅ Success:", result.stdout)
+
+            except subprocess.TimeoutExpired:
+                print(f"⏱️ Timeout: {x} took too long, skipping...")
+
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Error running {x}: {e.stderr}")
+                
+                print("done")
     print("All Done !!!!")
 
 
