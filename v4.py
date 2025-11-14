@@ -71,9 +71,9 @@ def filter_weak_detections(data):
             print(f"  Removed {asset} ID '{obj_id}': {asset_id_count[f'{asset}_{obj_id}']} occurrences")
 
     # Remove detections with < 3 occurrences
-    for frame in data:
+    for frame in list(data.keys()):
         if isinstance(data[frame], dict):
-            for asset_name in data[frame]:
+            for asset_name in list(data[frame].keys()):
                 data[frame][asset_name] = [det for det in data[frame][asset_name] 
                                             if (asset_name, det[0]) not in to_remove]
                 if not data[frame][asset_name]:

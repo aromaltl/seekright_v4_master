@@ -13,13 +13,14 @@ def check(a):
     except:
         return False
 ################################################################
-all_videos = glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=saudi_video_sync/Hail/**/*.MP4",recursive=True)
+all_videos = glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=roadis_phase4/ml_support/Qatar oct-2025/Green Zone/SH-MAP GREEN ( 12 &13-Oct-2025)/Green - Main Road - Doha Road, Al Khor, Qatar (12-Oct-2025)/**/*.MP4",recursive=True)
 all_jsons = glob.glob("/run/user/1000/gvfs/smb-share:server=anton.local,share=roadis_phase4/ml_support/Qatar oct-2025/Green Zone/SH-MAP GREEN ( 12 &13-Oct-2025)/Green - Main Road - Doha Road, Al Khor, Qatar (12-Oct-2025)/**/*sam_anno.json",recursive=True)
 site_name = "Qatar"
-date = '2024-11-11'
+date = '2025-11-06'
 version = '001'
 splitvalue = 3000
 writeimg = False
+
 ################################################################
 def normal(a,w,h):
     # print(a,"@#@#")
@@ -60,12 +61,13 @@ empty_xml_count = 0
 
 
 json_data = []
+classnames = set()
 for json_p in all_jsons: 
     # json_p = '/home/tl028/Downloads/saudi_annotate/2024_0728_104453_F_sam_anno.json'
     with open(json_p,'r') as f:
         data = eval(f.read())
 
-    image_name = 1
+
     error_count = 0
     vname = os.path.basename(json_p)
 
@@ -73,10 +75,10 @@ for json_p in all_jsons:
     vname = vname.split(".")[0]
     cap = cv2.VideoCapture(video)
     ret,fr = cap.read()
-    
+    print(json_p)
     for x in data:
         if check(x):
-            print(x)
+            #print(x)
 
             try:
                 results = []
@@ -88,6 +90,7 @@ for json_p in all_jsons:
                         region_id = str(uuid4())[:10]
                         label_name=ast
                         contours=vals[3]
+                        classnames.add(ast)
            
 
                         result = {
@@ -133,15 +136,16 @@ for json_p in all_jsons:
                     # })
                     empty_xml_count += 1
                 # cv2.imwrite(f"{data_path}/images/{image_file_path}.jpeg",fr)
-            except ET.ParseError:
-                empty_xml_count += 1
-                json_data.append({
-                        'data': {
-                            'image': create_image_url(image_file_path),
-                            'site_name' : site_name 
-                        }
-                })
+            # except ET.ParseError:
+            #     empty_xml_count += 1
+            #     json_data.append({
+            #             'data': {
+            #                 'image': create_image_url(image_file_path),
+            #                 'site_name' : site_name 
+            #             }
+            #     })
             except Exception as e:
+            
                 print(e)
                 # json_data.append({
                 #         'data': {
@@ -150,11 +154,12 @@ for json_p in all_jsons:
                 #         }
                 # })
                 error_count += 1
-
-for i in range(0,len(data_path),splitvalue):
-
-    with open(os.path.join(data_path, "import.json"), "w") as json_file:
-        json.dump(json_data[i:i+splitvalue], json_file, indent = 4)
-
-
+print(f"total {len(json_data)}")
+json_data = json_data[::5]
+for i in range(0,len(json_data),splitvalue):
+    print(f"saving import{i}.json")
+    with open( f"import{i}.json", "w") as json_file:
+        json.dump(json_data[i:i+splitvalue], json_file)
+for x in classnames:
+    print(x)
 

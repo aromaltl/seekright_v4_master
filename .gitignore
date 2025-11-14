@@ -2,9 +2,11 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+Image-ExifTool-12.22/
+*.csv
 # C extensions
 *.so
+*.MP4
 
 # Distribution / packaging
 .Python
